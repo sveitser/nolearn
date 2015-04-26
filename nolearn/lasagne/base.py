@@ -166,7 +166,9 @@ class NeuralNet(BaseEstimator):
             self.X_tensor_type,
             self.y_tensor_type,
             )
-        self.train_iter_, self.eval_iter_, self.predict_iter_ = iter_funcs
+        for name, fun in iter_funcs.items():
+            setattr(self, name, fun)
+        #self.train_iter_, self.eval_iter_, self.predict_iter_ = iter_funcs
         self._initialized = True
 
     def _get_params_for(self, name):
@@ -201,7 +203,7 @@ class NeuralNet(BaseEstimator):
             if 'name' not in layer_kwargs:
                 layer_kwargs['name'] = "{}{}".format(
                     layer_factory.__name__.lower().replace("layer", ""), i)
-                                  
+
             more_params = self._get_params_for(layer_kwargs['name'])
             layer_kwargs.update(more_params)
 
@@ -241,6 +243,8 @@ class NeuralNet(BaseEstimator):
         loss_train = obj.get_loss(X_batch, y_batch)
         loss_eval = obj.get_loss(X_batch, y_batch, deterministic=True)
         predict_proba = output_layer.get_output(X_batch, deterministic=True)
+        transform = list(layers.values())[-2].get_output(X_batch,
+                                                         deterministic=True)
         if not self.regression:
             predict = predict_proba.argmax(axis=1)
             accuracy = T.mean(T.eq(predict, y_batch))
@@ -275,8 +279,20 @@ class NeuralNet(BaseEstimator):
                 X: X_batch,
                 },
             )
+        transform_iter = theano.function(
+            inputs=[theano.Param(X_batch)],
+            outputs=transform,
+            givens={
+                X: X_batch,
+                },
+            )
 
-        return train_iter, eval_iter, predict_iter
+        return {
+            'train_iter_': train_iter,
+            'eval_iter_': eval_iter,
+            'predict_iter_': predict_iter,
+            'transform_iter_': transform_iter
+        }
 
     def fit(self, X, y):
         if self.use_label_encoder:
@@ -401,6 +417,12 @@ class NeuralNet(BaseEstimator):
             if self.use_label_encoder:
                 y_pred = self.enc_.inverse_transform(y_pred)
             return y_pred
+
+    def transform(self, X):
+        features = []
+        for Xb, yb in self.batch_iterator_test(X):
+            features.append(self.transform_iter_(Xb))
+        return np.vstack(features)
 
     def score(self, X, y):
         score = mean_squared_error if self.regression else accuracy_score

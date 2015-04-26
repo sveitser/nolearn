@@ -213,6 +213,36 @@ def test_clone():
 
     assert params == params1 == params2
 
+def test_transform(boston):
+    from nolearn.lasagne import NeuralNet
+    from sklearn.linear_model import LinearRegression
+    X, y = boston
+
+    nn = NeuralNet(
+        layers=[
+            ('input', InputLayer),
+            ('hidden1', DenseLayer),
+            ('output', DenseLayer),
+            ],
+        input_shape=(128, 13),
+        hidden1_num_units=100,
+        output_nonlinearity=identity,
+        output_num_units=1,
+
+        update_learning_rate=0.01,
+        update_momentum=0.1,
+        regression=True,
+        max_epochs=50,
+        )
+
+    nn.fit(X[:300], y[:300])
+    Xt = nn.transform(X[:300])
+    Xtt = nn.transform(X[300:])
+    lr = LinearRegression()
+    lr.fit(Xt, y[:300])
+    yp = lr.predict(Xtt)
+    assert mean_absolute_error(yp, y[300:]) < 3.0
+
 
 def test_lasagne_functional_regression(boston):
     from nolearn.lasagne import NeuralNet
@@ -277,7 +307,7 @@ class TestCheckForUnusedKwargs:
             update_foo=1,
             update_bar=2,
             )
-        net._create_iter_funcs = lambda *args: (1, 2, 3)
+        net._create_iter_funcs = lambda *args: {}
         net.initialize()
 
     def test_unused(self, NeuralNet):
@@ -289,7 +319,7 @@ class TestCheckForUnusedKwargs:
             update_foo=1,
             update_bar=2,
             )
-        net._create_iter_funcs = lambda *args: (1, 2, 3)
+        net._create_iter_funcs = lambda *args: {}
 
         with pytest.raises(ValueError) as err:
             net.initialize()
